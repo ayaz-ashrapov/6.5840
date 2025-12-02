@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -8,8 +9,6 @@ import (
 	"net/rpc"
 	"os"
 	"time"
-
-	"6.5840/mr"
 )
 
 // Map functions return a slice of KeyValue.
@@ -52,12 +51,13 @@ func Worker(mapf func(string, string) []KeyValue,
 		}
 
 		exit, ok := false, true
+		task := reply.Task
 
-		switch taskType := reply.TaskType; taskType {
+		switch taskType := task.TaskType; taskType {
 		case "map":
-			doMap(mapf, reply.TaskFile, reply.TaskId)
+			doMap(mapf, task.TaskFile, task.TaskId)
 		case "reduce":
-			doReduce(reducef, reply.TaskId)
+			doReduce(reducef, task.TaskId)
 		default:
 			fmt.Printf("Task type %s is not recognized", taskType)
 		}
@@ -81,21 +81,18 @@ func getReduceCount() (int, bool) {
 	return reply.N, ok
 }
 
-func requestTask() (*RequestTaskReply, bool) {
+func reportTask(*TaskState) {}
+
+func requestTask() (*Task, bool) {
 	args := RpcArgs{}
 	reply := RequestTaskReply{}
 
 	ok := call("Coordinator.RequestTask", &args, &reply)
 
-	return &reply, ok
+	return &reply.Task, ok
 }
 
-func doMap(mapf func(string, string) []KeyValue, filename string, taskId int) {
-	// read each input file,
-	// pass it to Map,
-	// accumulate the intermediate Map output.
-	//
-	intermediate := []mr.KeyValue{}
+func doMap(mapf func(string, string) []KeyValue, filename string, taskId int) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatalf("cannot open %v", filename)
@@ -106,12 +103,37 @@ func doMap(mapf func(string, string) []KeyValue, filename string, taskId int) {
 	}
 	file.Close()
 	kva := mapf(filename, string(content))
-	intermediate = append(intermediate, kva...)
+	filenames := []string{}
+
+	for _, kv := range kva {
+		tmpFileName := fmt.Sprintf("mr-%v-%v", taskId, ihash(kv.Key)%nReduce)
+		tmpFile, err := os.Open(tmpFileName)
+		if err != nil {
+			log.Fatalf("cannot open %v", filename)
+			//TODO check if we should skip or return an error here
+			return nil, err
+		}
+
+		enc := json.NewEncoder(tmpFile)
+		err = enc.Encode(&kv)
+		if err != nil {
+			log.Fatalf("couldn't write to %v because of %v", filename, err.Error())
+			return nil, err
+		}
+
+		filenames = append(filenames, tmpFileName)
+	}
+
+	return filenames, nil
 }
 
 func doReduce(reducef func(string, []string) string, taskId int) {
 	// call Reduce on each distinct key in intermediate[],
 	// and print the result to mr-out-0.
+	// The worker implementation should put the output of the X'th reduce task in the file mr-out-X.
+	//A mr-out-X file should contain one line per Reduce function output.
+	// The line should be generated with the Go "%v %v" format, called with the key and value.
+	intermediate := make([]KeyValue, 0)
 	oname := "mr-out-0"
 	ofile, _ := os.Create(oname)
 	i := 0

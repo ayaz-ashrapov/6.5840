@@ -9,29 +9,41 @@ package mr
 import (
 	"os"
 	"strconv"
+	"time"
 )
-
-//
-// example to show how to declare the arguments
-// and reply for an RPC.
-//
 
 type RpcArgs struct {
 	X int
-}
-
-type RpcReply struct {
-	Y int
 }
 
 type GetReduceCountReply struct {
 	N int
 }
 
-type RequestTaskReply struct {
+type Task struct {
 	TaskFile string
 	TaskId   int
 	TaskType string
+	Timeout  time.Duration
+}
+
+type TaskResult struct {
+	TaskID int
+	Err    error
+}
+
+type TaskState struct {
+	Task   Task
+	Result TaskResult
+}
+
+type RequestTaskReply struct {
+	HasTask bool
+	Task    Task
+}
+
+type ReportTaskDoneReply struct {
+	TaskState TaskState
 }
 
 // Add your RPC definitions here.
