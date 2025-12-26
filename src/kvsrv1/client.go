@@ -2,10 +2,9 @@ package kvsrv
 
 import (
 	"6.5840/kvsrv1/rpc"
-	"6.5840/kvtest1"
-	"6.5840/tester1"
+	kvtest "6.5840/kvtest1"
+	tester "6.5840/tester1"
 )
-
 
 type Clerk struct {
 	clnt   *tester.Clnt
@@ -30,6 +29,23 @@ func MakeClerk(clnt *tester.Clnt, server string) kvtest.IKVClerk {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 	// You will have to modify this function.
+	args := rpc.GetArgs{}
+	args.Key = key
+	reply := rpc.GetReply{}
+
+	for true {
+
+		ok := ck.clnt.Call(ck.server, "KVServer.Get", &args, &reply)
+		if ok {
+			//println("GET: got reply ", reply.Err)
+			if reply.Err == rpc.ErrNoKey {
+				break
+			} else if reply.Err == rpc.OK {
+				return reply.Value, reply.Version, rpc.OK
+			}
+		}
+	}
+
 	return "", 0, rpc.ErrNoKey
 }
 
@@ -52,5 +68,37 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 // arguments. Additionally, reply must be passed as a pointer.
 func (ck *Clerk) Put(key, value string, version rpc.Tversion) rpc.Err {
 	// You will have to modify this function.
+
+	args := rpc.PutArgs{}
+	reply := rpc.PutReply{}
+
+	args.Key = key
+	args.Value = value
+	args.Version = version
+	//println("PUT: sending ", key, value, version)
+	count := 0
+
+	for true {
+		ok := ck.clnt.Call(ck.server, "KVServer.Put", &args, &reply)
+		if ok {
+			//println("PUT: got reply ", reply.Err)
+			if reply.Err == rpc.OK || reply.Err == rpc.ErrNoKey {
+				return reply.Err
+			}
+
+			if reply.Err == rpc.ErrVersion {
+				if count == 0 {
+					count++
+					return rpc.ErrVersion
+				}
+				count++
+				return rpc.ErrMaybe
+			}
+			count++
+		} else {
+			println("NOT OK!")
+		}
+	}
+
 	return rpc.ErrNoKey
 }
