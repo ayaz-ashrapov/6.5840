@@ -49,6 +49,16 @@ func (lk *Lock) Acquire() {
 			} else {
 				time.Sleep(10 * time.Millisecond)
 			}
+		} else if err == rpc.ErrNoKey {
+			putErr := lk.ck.Put(lk.lockName, lk.clientId, version)
+			if putErr == rpc.OK {
+				return
+			} else if putErr == rpc.ErrMaybe {
+				owner, version, err = lk.ck.Get(lk.lockName)
+				if owner == lk.clientId {
+					return
+				}
+			}
 		} else {
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -66,8 +76,12 @@ func (lk *Lock) Release() {
 				putError := lk.ck.Put(lk.lockName, "", version)
 				if putError == rpc.OK {
 					return
+				} else if putError == rpc.ErrMaybe {
+					continue
 				}
 			}
+		} else if err == rpc.ErrNoKey {
+			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
