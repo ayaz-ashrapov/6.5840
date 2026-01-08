@@ -66,8 +66,6 @@ func (lk *Lock) Release() {
 				putError := lk.ck.Put(lk.lockName, "", version)
 				if putError == rpc.OK {
 					return
-				} else if putError == rpc.ErrMaybe {
-					putError = lk.ck.Put(lk.lockName, "", version)
 				}
 			}
 		}

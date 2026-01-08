@@ -45,6 +45,8 @@ func (ck *Clerk) Get(key string) (string, rpc.Tversion, rpc.Err) {
 				return reply.Value, reply.Version, rpc.OK
 			}
 		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return "", 0, rpc.ErrNoKey
